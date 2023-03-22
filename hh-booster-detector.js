@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name            Hentai Heroes++ League Booster Detector Add-on
 // @description     Adding detection of boosters to league.
-// @version         0.2.3
+// @version         0.2.4
 // @match           https://*.hentaiheroes.com/*
 // @match           https://nutaku.haremheroes.com/*
 // @match           https://www.gayharem.com/*
@@ -10,8 +10,8 @@
 // @match           https://*.hornyheroes.com/*
 // @match           https://*.pornstarharem.com/*
 // @run-at          document-end
-// @updateURL       https://raw.githubusercontent.com/45026831/hh-booster-detector/main/hh-booster-detector.js
-// @downloadURL     https://raw.githubusercontent.com/45026831/hh-booster-detector/main/hh-booster-detector.js
+// @updateURL       https://raw.githubusercontent.com/zoop0kemon/hh-booster-detector/main/hh-booster-detector.js
+// @downloadURL     https://raw.githubusercontent.com/zoop0kemon/hh-booster-detector/main/hh-booster-detector.js
 // @grant           none
 // @author          45026831(Numbers), zoopokemon
 // ==/UserScript==
@@ -19,6 +19,7 @@
 /*  ===========
      CHANGELOG
     =========== */
+// 0.2.4: Fixes for variable name and behavior changes after 22/03 update
 // 0.2.3: Adding pending indication while profile data is being loaded
 // 0.2.2: Adding tooltips on mobile
 // 0.2.1: Fixing ginseng check in the corner-case where profile stats don't match snapshot
@@ -157,10 +158,18 @@ ${extraPercent > 0 ? `Extra: ${extraPercent}%` : ''}
 `
 
 function estimateHaremLevel(level) {
-    const teamLevels = playerLeaguesData.team.girls.map(({ level }) => level)
+    const { opponent_fighter, loadedLeaguePlayers } = window
+    let opponent_data
+    if (Object.keys(loadedLeaguePlayers)?.length) {
+        let opponentId = $('#leagues_right .avatar_border>img').attr('hero-page-id')
+        opponent_data = loadedLeaguePlayers[opponentId].player
+    } else {
+        opponent_data = opponent_fighter.player
+    }
+    const teamLevels = opponent_data.team.girls.map(({ level }) => level)
     const teamLevel = teamLevels.reduce((a, b) => a + b, 0)
     const teamCount = teamLevels.length
-    const girlsCount = playerLeaguesData.team.synergies.map(({ harem_girls_count }) => harem_girls_count).reduce((a, b) => a + b, 0)
+    const girlsCount = opponent_data.team.synergies.map(({ harem_girls_count }) => harem_girls_count).reduce((a, b) => a + b, 0)
 
     if (girlsCount <= 7) {
         if (girlsCount == teamCount) {
@@ -227,12 +236,12 @@ async function getEquipDataFromProfile(playerId) {
                 success: res
             })
         })
-    
+
         const $page = $(html)
-    
+
         const equips = []
         const stats = {}
-    
+
         $page.find('.hero_items .slot-container .slot').each((i, el) => {
             const $slot = $(el)
             const data = $slot.data('d')
@@ -240,13 +249,13 @@ async function getEquipDataFromProfile(playerId) {
                 equips.push(data)
             }
         })
-    
+
         const CARAC_KEYS = ['1', '2', '3', 'endurance', 'chance']
         CARAC_KEYS.forEach(carac => {
             const caracVal = $page.find(`.fight_stats [carac=${carac}]`).text()
             stats[carac] = +caracVal.replace(/[^0-9]/g, '')
         })
-    
+
         profileDataCache[playerId] = { equips, stats }
     }
 
@@ -258,6 +267,7 @@ if (currentPage.includes('tower-of-fame')) {
 }
 
 function boosterModule() {
+    let opponent_data
     let opponentLvl
     let opponentEgo
     let opponentMainStat
@@ -291,13 +301,19 @@ function boosterModule() {
     let equipCaracs
 
     async function getStats() {
-        const { playerLeaguesData, heroLeaguesData } = window
+        const { opponent_fighter, hero_fighter, loadedLeaguePlayers, GT } = window
 
-        opponentHasClub = !!(playerLeaguesData.club && playerLeaguesData.club.id_club)
-        opponentLvl = parseInt(playerLeaguesData.level, 10)
-        opponentClass = playerLeaguesData.class
+        if (Object.keys(loadedLeaguePlayers)?.length) {
+            let opponentId = $('#leagues_right .avatar_border>img').attr('hero-page-id')
+            opponent_data = loadedLeaguePlayers[opponentId].player
+        } else {
+            opponent_data = opponent_fighter.player
+        }
+        opponentHasClub = !!(opponent_data.club && opponent_data.club.id_club)
+        opponentLvl = parseInt(opponent_data.level, 10)
+        opponentClass = opponent_data.class
 
-        const { caracs } = playerLeaguesData
+        const { caracs } = opponent_data
 
         if (caracs) {
             opponentEgo = caracs.ego
@@ -309,20 +325,20 @@ function boosterModule() {
             opponentHarmony = caracs.chance
             opponentDef = caracs.defense
         } else {
-            opponentEgo = playerLeaguesData.total_ego || playerLeaguesData.remaining_ego
-            opponentMainStat = playerLeaguesData[`carac${opponentClass}`]
-            opponentScndStat = playerLeaguesData[`carac${classRelationships[opponentClass].s}`]
-            opponentTertStat = playerLeaguesData[`carac${classRelationships[opponentClass].t}`]
-            opponentEndurance = playerLeaguesData.endurance
-            opponentAtk = playerLeaguesData.damage
-            opponentHarmony = playerLeaguesData.chance
-            opponentDef = playerLeaguesData.defense
+            opponentEgo = opponent_data.total_ego || opponent_data.remaining_ego
+            opponentMainStat = opponent_data[`carac${opponentClass}`]
+            opponentScndStat = opponent_data[`carac${classRelationships[opponentClass].s}`]
+            opponentTertStat = opponent_data[`carac${classRelationships[opponentClass].t}`]
+            opponentEndurance = opponent_data.endurance
+            opponentAtk = opponent_data.damage
+            opponentHarmony = opponent_data.chance
+            opponentDef = opponent_data.defense
         }
         isEstimate = false
 
-        const { equips, stats } = await getEquipDataFromProfile(playerLeaguesData.id_fighter)
+        const { equips, stats } = await getEquipDataFromProfile(opponent_data.id_fighter)
 
-        const { team } = playerLeaguesData
+        const { team } = opponent_data
         const { synergies, total_power } = team
         opponentGirlSum = total_power
 
@@ -353,9 +369,9 @@ function boosterModule() {
             harmony: findBonusFromSynergies(synergies, 'psychic', teamGirlSynergyBonusesMissing, counts),
             ego: findBonusFromSynergies(synergies, 'nature', teamGirlSynergyBonusesMissing, counts),
         }
-        ownDefenseReductionAdjustment = findBonusFromSynergies(heroLeaguesData.team.synergies, 'sun')
+        ownDefenseReductionAdjustment = findBonusFromSynergies(hero_fighter.team.synergies, 'sun')
 
-        const [heroTheme, opponentTheme] = [heroLeaguesData, playerLeaguesData].map(data => data.team.theme_elements.map(({ type }) => type))
+        const [heroTheme, opponentTheme] = [hero_fighter, opponent_data].map(data => data.team.theme_elements.map(({ type }) => type))
         const dominanceBonuses = calculateDominationBonuses(heroTheme, opponentTheme)
 
         const mythicEquipBonuses = {
@@ -385,7 +401,7 @@ function boosterModule() {
         })
         console.log('calculated mythic equip bonuses', mythicEquipBonuses)
 
-        rawHarmony = Math.ceil(stats.chance * (1 + opponentBonuses.harmony) * (1 + mythicEquipBonuses.chance))
+        const rawHarmony = Math.ceil(stats.chance * (1 + opponentBonuses.harmony) * (1 + mythicEquipBonuses.chance))
         console.log('profile harm', rawHarmony, 'page harm', opponentHarmony, '(synergy:', opponentBonuses.harmony, '; equips:', mythicEquipBonuses.chance, '; total:', opponentHarmony, ')')
         const statsMatch = rawHarmony + 1 >= opponentHarmony && rawHarmony - 1 <= opponentHarmony
         console.log('stats match?', statsMatch)
@@ -460,19 +476,19 @@ function boosterModule() {
             opponentTertStat = Math.ceil(opponentNonMainStatSum * tertShare)
         }
 
-        $attack = $('#leagues_right .stats_wrap .stat:nth-of-type(1)')
-        $ego = $('#leagues_right .stats_wrap .stat:nth-of-type(2)')
-        $defense = $('#leagues_right .stats_wrap .stat:nth-of-type(3)')
-        $harmony = $('#leagues_right .stats_wrap .stat:nth-of-type(4)')
+        $attack = $('#leagues_right .player_stats #player_attack_stat')
+        $ego = $('#leagues_right .player_stats #player_ego_stat')
+        $defense = $('#leagues_right .player_stats #player_defence_stat')
+        $harmony = $('#leagues_right .player_stats #player_harmony_stat')
         $attackMobile = $('.selected-player-leagues .carac.attack')
         $egoMobile = $('.selected-player-leagues .carac.excitement') // [sic]
         $defenseMobile = $('.selected-player-leagues .carac.def0')
         $harmonyMobile = $('.selected-player-leagues .carac.harmony')
 
-        const existingAttackTooltip = $attack.attr('hh_title')
-        const existingDefenceTooltip = $defense.attr('hh_title')
-        let existingEgoTooltip = $ego.attr('hh_title')
-        let existingHarmonyTooltip = $harmony.attr('hh_title')
+        const existingAttackTooltip = $attack.attr('tooltip')
+        const existingDefenceTooltip = $defense.attr('tooltip')
+        let existingEgoTooltip = $ego.attr('tooltip')
+        let existingHarmonyTooltip = $harmony.attr('tooltip')
         if (existingEgoTooltip === '##carac_ego') {
             existingEgoTooltip = GT.ego
         }
@@ -483,20 +499,20 @@ function boosterModule() {
         const attackTooltip = `${existingAttackTooltip}<br/>
             ${isEstimate ? 'Estimate ' : ''}<span carac="class${opponentClass}"/> ${opponentMainStat.toLocaleString(locale)}<br/>
             Monostat count: ${opponentMonostatCount}`
-        $attack.attr('tooltip', attackTooltip).removeAttr('hh_title')
+        $attack.attr('tooltip', attackTooltip)
         $attackMobile.attr('tooltip', attackTooltip)
 
         const defenseTooltip = `${existingDefenceTooltip}<br/>
             ${isEstimate ? 'Estimate ' : ''}<span carac="class${classRelationships[opponentClass].s}"/> ${opponentScndStat.toLocaleString(locale)}<br/>
             ${isEstimate ? 'Estimate ' : ''}<span carac="class${classRelationships[opponentClass].t}"/> ${opponentTertStat.toLocaleString(locale)}`
-        $defense.attr('tooltip', defenseTooltip).removeAttr('hh_title')
+        $defense.attr('tooltip', defenseTooltip)
         $defenseMobile.attr('tooltip', defenseTooltip)
 
         const egoTooltip = `${existingEgoTooltip}<br/>${isEstimate ? 'Estimate ' : ''}<span carac="endurance"/> ${opponentEndurance.toLocaleString(locale)}`
-        $ego.attr('tooltip', egoTooltip).removeAttr('hh_title')
+        $ego.attr('tooltip', egoTooltip)
         $egoMobile.attr('tooltip', egoTooltip)
 
-        $harmony.attr('tooltip', existingHarmonyTooltip).removeAttr('hh_title')
+        $harmony.attr('tooltip', existingHarmonyTooltip)
         $harmonyMobile.attr('tooltip', existingHarmonyTooltip)
     }
 
@@ -613,7 +629,7 @@ function boosterModule() {
     }
 
     async function checkBoosters() {
-        const $statsContainer = $('#leagues_right .fighter-stats-container, .selected-player-leagues .caracs-hero')
+        const $statsContainer = $('#leagues_right .player_stats')
         $statsContainer.addClass('booster-detector-pending')
         await getStats()
 
@@ -623,7 +639,6 @@ function boosterModule() {
         checkJujubes()
         $statsContainer.removeClass('booster-detector-pending')
     }
-    checkBoosters()
 
     // Observer grabbed from HH++
     let opntName;
@@ -632,8 +647,8 @@ function boosterModule() {
     })
     function waitOpnt() {
         setTimeout(function () {
-            if ($('#leagues_right .team-member > img').data('new-girl-tooltip')) {
-                checkBoosters();
+            if ($('#leagues_right .team-member > img').eq(3).data('new-girl-tooltip')) {
+                checkBoosters()
             }
             else {
                 waitOpnt()
@@ -641,10 +656,10 @@ function boosterModule() {
         }, 50);
     }
     const observeCallback = function () {
-        const opntNameNew = $('#leagues_right .player_block .title')[0].innerHTML
+        const opntNameNew = $('#leagues_right .leagues_team_block .title')[0].innerHTML
         if (opntName !== opntNameNew) {
-            opntName = opntNameNew;
-            waitOpnt();
+            opntName = opntNameNew
+            waitOpnt()
         }
     }
     const observer = new MutationObserver(observeCallback);
