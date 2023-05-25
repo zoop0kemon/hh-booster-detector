@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name            Hentai Heroes++ League Booster Detector Add-on
 // @description     Adding detection of boosters to league.
-// @version         0.2.4
+// @version         0.2.5
 // @match           https://*.hentaiheroes.com/*
 // @match           https://nutaku.haremheroes.com/*
 // @match           https://www.gayharem.com/*
@@ -19,6 +19,7 @@
 /*  ===========
      CHANGELOG
     =========== */
+// 0.2.5: Fixing collection of opponent player equip data
 // 0.2.4: Fixes for variable name and behavior changes after 22/03 update
 // 0.2.3: Adding pending indication while profile data is being loaded
 // 0.2.2: Adding tooltips on mobile
@@ -239,17 +240,10 @@ async function getEquipDataFromProfile(playerId) {
 
         const $page = $(html)
 
-        const equips = []
+        const equip_code = $page.find('script').text()
+        const equips = Object.values(JSON.parse(equip_code.match(/{.*}/)[0]))
+
         const stats = {}
-
-        $page.find('.hero_items .slot-container .slot').each((i, el) => {
-            const $slot = $(el)
-            const data = $slot.data('d')
-            if (data) {
-                equips.push(data)
-            }
-        })
-
         const CARAC_KEYS = ['1', '2', '3', 'endurance', 'chance']
         CARAC_KEYS.forEach(carac => {
             const caracVal = $page.find(`.fight_stats [carac=${carac}]`).text()
@@ -345,6 +339,7 @@ function boosterModule() {
         const teamGirlSynergyBonusesMissing = synergies.every(({ team_girls_count }) => !team_girls_count)
         let counts
         if (teamGirlSynergyBonusesMissing) {
+            console.log('Opponent Team Girl Synergy Bonuses Missing')
             const opponentTeamMemberElements = [];
             [0, 1, 2, 3, 4, 5, 6].forEach(key => {
                 const teamMember = team.girls[key]
